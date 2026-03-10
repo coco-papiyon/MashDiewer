@@ -1,0 +1,28 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "github-markdown-css": "^5.9.0",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.1",
+    "mermaid": "^11.13.0",
+    "vue": "^3.2.37"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.18.10",
+    "@types/highlight.js": "^9.12.4",
+    "@types/markdown-it": "^14.1.2",
+    "@types/mermaid": "^9.1.0",
+    "@vitejs/plugin-vue": "^3.0.3",
+    "typescript": "^5.9.3",
+    "vite": "^3.0.7",
+    "vue-tsc": "^3.2.5"
+  }
+}
