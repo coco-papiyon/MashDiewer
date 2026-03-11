@@ -5,6 +5,7 @@ go 1.23
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/wailsapp/wails/v2 v2.10.2
+	golang.org/x/text v0.22.0
 )
 
 require (
@@ -34,7 +35,6 @@ require (
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
 )
 
 // replace github.com/wailsapp/wails/v2 v2.10.2 => C:\dev\go\pkg\mod

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,16 +16,20 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/transform"
 )
 
 // App struct
 type App struct {
-	ctx          context.Context
-	initialFile  string
-	initialDir   string
-	currentFile  string
-	watcher      *fsnotify.Watcher
-	watcherMutex sync.Mutex
+	ctx             context.Context
+	initialFile     string
+	initialDir      string
+	currentFile     string
+	currentEncoding string
+	isPrettyPrint   bool
+	watcher         *fsnotify.Watcher
+	watcherMutex    sync.Mutex
 }
 
 // NewApp creates a new App application struct
@@ -60,6 +66,11 @@ func NewApp(initialPath string) *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Handle native file drops
+	runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
+		runtime.EventsEmit(ctx, "custom-file-drop", paths)
+	})
 
 	// Initialize fsnotify watcher
 	watcher, err := fsnotify.NewWatcher()
@@ -173,6 +184,20 @@ func (a *App) GetParentDir(dirPath string) string {
 	return filepath.Dir(dirPath)
 }
 
+// OpenDirectory opens a directory selection dialog and updates the tree view.
+func (a *App) OpenDirectory() {
+	selection, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "フォルダを選択",
+	})
+	if err != nil {
+		fmt.Printf("Error selecting directory: %v\n", err)
+		return
+	}
+	if selection != "" {
+		runtime.EventsEmit(a.ctx, "directory-opened", selection)
+	}
+}
+
 func getMimeType(ext string) string {
 	switch ext {
 	case ".png":
@@ -243,12 +268,17 @@ func (a *App) LoadFile(filePath string) {
 	} else if isBinary {
 		payload = fmt.Sprintf("# Unsupported File\n\n`%s` appears to be a binary file and cannot be displayed as text.", filepath.Base(absPath))
 	} else {
-		if ext == ".md" || ext == ".markdown" {
-			markdownContent := string(content)
+		// Decode content based on current encoding
+		decodedStr, err := a.decodeContent(content, a.currentEncoding)
+		if err != nil {
+			fmt.Printf("Failed to decode content with %s: %v\n", a.currentEncoding, err)
+			decodedStr = string(content) // Fallback to raw string
+		}
 
+		if ext == ".md" || ext == ".markdown" {
 			// Simple logic to resolve relative image paths in markdown
 			// This finds ![]() and tries to replace path with base64
-			lines := strings.Split(markdownContent, "\n")
+			lines := strings.Split(decodedStr, "\n")
 			for i, line := range lines {
 				if strings.Contains(line, "![") && strings.Contains(line, "](") && strings.Contains(line, ")") {
 					startIdx := strings.Index(line, "](") + 2
@@ -275,10 +305,62 @@ func (a *App) LoadFile(filePath string) {
 		} else {
 			// Wrap raw text in a Markdown code block so highlight.js handles it
 			lang := strings.TrimPrefix(ext, ".")
-			payload = fmt.Sprintf("```%s\n%s\n```", lang, string(content))
+			
+			displayContent := decodedStr
+			if lang == "json" && a.isPrettyPrint {
+				var jsonObj interface{}
+				if err := json.Unmarshal([]byte(decodedStr), &jsonObj); err == nil {
+					if pretty, err := json.MarshalIndent(jsonObj, "", "  "); err == nil {
+						displayContent = string(pretty)
+					}
+				}
+			}
+			
+			payload = fmt.Sprintf("```%s\n%s\n```", lang, displayContent)
 		}
 	}
 
 	// Send content to frontend
 	runtime.EventsEmit(a.ctx, "markdown-updated", payload)
+}
+
+// ChangeEncoding updates the current encoding and reloads the current file if possible.
+func (a *App) ChangeEncoding(encoding string) {
+	a.currentEncoding = encoding
+	if a.currentFile != "" {
+		a.LoadFile(a.currentFile)
+	}
+}
+
+// SetPrettyPrint updates the pretty print flag and reloads the current file if it's a JSON.
+func (a *App) SetPrettyPrint(pretty bool) {
+	a.isPrettyPrint = pretty
+	if a.currentFile != "" && strings.ToLower(filepath.Ext(a.currentFile)) == ".json" {
+		a.LoadFile(a.currentFile)
+	}
+}
+
+func (a *App) decodeContent(content []byte, encodingName string) (string, error) {
+	if encodingName == "" || strings.ToUpper(encodingName) == "UTF-8" {
+		return string(content), nil
+	}
+
+	var enc transform.Transformer
+	switch strings.ToUpper(encodingName) {
+	case "SHIFT-JIS":
+		enc = japanese.ShiftJIS.NewDecoder()
+	case "EUC-JP":
+		enc = japanese.EUCJP.NewDecoder()
+	case "ISO-2022-JP":
+		enc = japanese.ISO2022JP.NewDecoder()
+	default:
+		return string(content), nil
+	}
+
+	reader := transform.NewReader(bytes.NewReader(content), enc)
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+	return string(decoded), nil
 }

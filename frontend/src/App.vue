@@ -7,7 +7,7 @@ import hljs from 'highlight.js';
 import mermaid from 'mermaid';
 import AnsiToHtml from 'ansi-to-html';
 import TreeNode from './components/TreeNode.vue';
-import { GetDirectoryTree, GetParentDir } from '../wailsjs/go/main/App';
+import { GetDirectoryTree, GetParentDir, LoadFile, OpenDirectory, ChangeEncoding, SetPrettyPrint } from '../wailsjs/go/main/App';
 
 // Styles for GitHub markdown and syntax highlighting
 import 'github-markdown-css/github-markdown.css';
@@ -18,6 +18,8 @@ const isError = ref<boolean>(false);
 const treeNodes = ref<any[]>([]);
 const currentDir = ref<string>('');
 const isWordWrap = ref<boolean>(false);
+const currentEncoding = ref<string>('UTF-8');
+const isPrettyPrint = ref<boolean>(false);
 
 const currentDirName = computed(() => {
   if (!currentDir.value) return 'Drives';
@@ -46,6 +48,16 @@ const navigateToDir = async (path: string) => {
   } catch (e) {
     console.error("Failed to navigate to dir", e);
   }
+};
+
+const openDirDialog = () => OpenDirectory();
+
+const onEncodingChange = () => {
+  ChangeEncoding(currentEncoding.value);
+};
+
+const onPrettyPrintChange = () => {
+  SetPrettyPrint(isPrettyPrint.value);
 };
 
 const sidebarWidth = ref<number>(300);
@@ -152,6 +164,30 @@ onMounted(() => {
     }
   });
 
+  EventsOn('custom-file-drop', async (paths: string[]) => {
+    if (paths && paths.length > 0) {
+      const droppedFilePath = paths[0];
+      try {
+        const parentDir = await GetParentDir(droppedFilePath);
+        currentDir.value = parentDir;
+        treeNodes.value = await GetDirectoryTree(parentDir);
+        currentEncoding.value = 'UTF-8'; // Reset encoding on new file
+        await LoadFile(droppedFilePath);
+      } catch (e) {
+        console.error("Failed to handle dropped file", e);
+      }
+    }
+  });
+
+  EventsOn('directory-opened', async (dirPath: string) => {
+    try {
+      currentDir.value = dirPath;
+      treeNodes.value = await GetDirectoryTree(dirPath);
+    } catch (e) {
+      console.error("Failed to open directory", e);
+    }
+  });
+
   // Tell the backend we are ready to receive the initial file
   InitializeFile();
 });
@@ -159,6 +195,8 @@ onMounted(() => {
 onUnmounted(() => {
   EventsOff('markdown-updated');
   EventsOff('set-initial-dir');
+  EventsOff('custom-file-drop');
+  EventsOff('directory-opened');
 });
 </script>
 
@@ -177,25 +215,45 @@ onUnmounted(() => {
           @navigate="navigateToDir"
         />
       </div>
+      <div class="sidebar-footer">
+        <button class="open-btn" @click="openDirDialog" title="フォルダを開く">📂 フォルダを開く</button>
+      </div>
     </div>
     
     <div class="resizer" @mousedown="startResize" :class="{ active: isResizing }"></div>
     
-    <div class="main-content wrapper" :class="{ 'error-wrapper': isError }">
-      <div class="main-toolbar" v-if="markdownHtml">
-        <label class="wrap-checkbox">
-          <input type="checkbox" v-model="isWordWrap"> 右端で折り返す
-        </label>
+    <div class="main-content" :class="{ 'error-wrapper': isError }">
+      <div class="content-viewport">
+        <div v-if="!markdownHtml" class="loading-state">
+          <p>Waiting for markdown content...</p>
+        </div>
+        <div 
+          v-else
+          class="markdown-body custom-markdown wrapper" 
+          :class="{ 'word-wrap': isWordWrap }"
+          v-html="markdownHtml"
+        ></div>
       </div>
-      <div v-if="!markdownHtml" class="loading-state">
-        <p>Waiting for markdown content...</p>
+      
+      <div class="status-bar">
+        <div class="status-left">
+          <label class="wrap-checkbox">
+            <input type="checkbox" v-model="isWordWrap"> 右端で折り返す
+          </label>
+          <label class="wrap-checkbox">
+            <input type="checkbox" v-model="isPrettyPrint" @change="onPrettyPrintChange"> 整形して表示
+          </label>
+        </div>
+        <div class="status-right">
+          <span class="encoding-label">文字コード:</span>
+          <select v-model="currentEncoding" @change="onEncodingChange" class="encoding-select">
+            <option value="UTF-8">UTF-8</option>
+            <option value="SHIFT-JIS">Shift-JIS</option>
+            <option value="EUC-JP">EUC-JP</option>
+            <option value="ISO-2022-JP">ISO-2022-JP</option>
+          </select>
+        </div>
       </div>
-      <div 
-        v-else
-        class="markdown-body custom-markdown" 
-        :class="{ 'word-wrap': isWordWrap }"
-        v-html="markdownHtml"
-      ></div>
     </div>
   </div>
 </template>
@@ -233,6 +291,7 @@ html, body {
   display: flex;
   height: 100vh;
   width: 100%;
+  --wails-drop-target: drop;
 }
 
 .layout-container.is-resizing {
@@ -295,7 +354,41 @@ html, body {
   padding: 10px;
 }
 
+.sidebar-footer {
+  padding: 8px;
+  border-top: 1px solid #d0d7de;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.open-btn {
+  width: 100%;
+  padding: 7px 10px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #24292f;
+  text-align: left;
+  transition: background 0.15s;
+}
+.open-btn:hover {
+  background: #dce4ef;
+  border-color: #0969da;
+  color: #0969da;
+}
+
 .main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.content-viewport {
   flex: 1;
   overflow-y: auto;
 }
@@ -303,19 +396,41 @@ html, body {
 .wrapper {
   padding: 32px;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
 }
 
-.main-toolbar {
+.status-bar {
+  background-color: #f6f8fa;
+  border-top: 1px solid #d0d7de;
+  padding: 4px 16px;
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  align-items: center;
+  height: 32px;
+  z-index: 20;
+}
+
+.status-left, .status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.encoding-select {
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid #d0d7de;
+  background: white;
+  font-size: 12px;
+  color: #24292f;
+}
+
+.encoding-label {
+  color: #57606a;
+  font-size: 12px;
 }
 
 .wrap-checkbox {
-  font-size: 13px;
+  font-size: 12px;
   color: #57606a;
   cursor: pointer;
   display: flex;
