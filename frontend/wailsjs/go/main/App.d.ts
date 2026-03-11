@@ -9,5 +9,3 @@ export function GetParentDir(arg1:string):Promise<string>;
 export function InitializeFile():Promise<void>;
 
 export function LoadFile(arg1:string):Promise<void>;
-
-export function OpenFile():Promise<void>;

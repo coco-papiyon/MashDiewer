@@ -17,6 +17,7 @@ const markdownHtml = ref<string>('');
 const isError = ref<boolean>(false);
 const treeNodes = ref<any[]>([]);
 const currentDir = ref<string>('');
+const isWordWrap = ref<boolean>(false);
 
 const currentDirName = computed(() => {
   if (!currentDir.value) return 'Drives';
@@ -116,7 +117,14 @@ const ansiConvert = new AnsiToHtml({
   escapeXML: false,
   newline: false,
   fg: '#24292f',
-  bg: '#ffffff'
+  bg: '#ffffff',
+  colors: {
+    1: '#cb2431',  // [31m (Red text)
+    6: '#1b7c83',  // [36m / [46m (Cyan / Cyan background)
+    10: '#28a745', // [92m (Bright Green text)
+    14: '#005cc5', // [96m (Bright Cyan text) -> make it a darker solid blue
+    15: '#f6f8fa'  // [97m / [107m (Bright White text / Bright White background)
+  }
 });
 
 onMounted(() => {
@@ -174,14 +182,20 @@ onUnmounted(() => {
     <div class="resizer" @mousedown="startResize" :class="{ active: isResizing }"></div>
     
     <div class="main-content wrapper" :class="{ 'error-wrapper': isError }">
-    <div v-if="!markdownHtml" class="loading-state">
-      <p>Waiting for markdown content...</p>
-    </div>
-    <div 
-      v-else
-      class="markdown-body custom-markdown" 
-      v-html="markdownHtml"
-    ></div>
+      <div class="main-toolbar" v-if="markdownHtml">
+        <label class="wrap-checkbox">
+          <input type="checkbox" v-model="isWordWrap"> 右端で折り返す
+        </label>
+      </div>
+      <div v-if="!markdownHtml" class="loading-state">
+        <p>Waiting for markdown content...</p>
+      </div>
+      <div 
+        v-else
+        class="markdown-body custom-markdown" 
+        :class="{ 'word-wrap': isWordWrap }"
+        v-html="markdownHtml"
+      ></div>
     </div>
   </div>
 </template>
@@ -290,7 +304,24 @@ html, body {
   padding: 32px;
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   justify-content: flex-start;
+}
+
+.main-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24px;
+}
+
+.wrap-checkbox {
+  font-size: 13px;
+  color: #57606a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
 }
 
 .error-wrapper {
@@ -313,5 +344,16 @@ html, body {
   margin: 0;
   text-align: left;
   background-color: transparent !important;
+}
+
+.custom-markdown.word-wrap {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.custom-markdown.word-wrap pre,
+.custom-markdown.word-wrap code {
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
 }
 </style>

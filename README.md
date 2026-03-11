@@ -1,19 +1,34 @@
-# README
+# MashDiewer
 
-## About
+MashDiewer はデスクトップ向けのファイルビューアーおよび Markdown プレビューアプリケーションです。
 
-This is the official Wails Vue-TS template.
+## 主な機能（Features）
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+- **エクスプローラ風の分割レイアウト**  
+  左側のサイドバーで現在のディレクトリやファイルの構造を表示し、クリック一つで中身を確認できます。サイドバーとメイン領域の境界線はマウスのドラッグで自由にリサイズ可能です。また「⬆️」ボタンで親ディレクトリへ簡単に戻ることができます（フォルダ・ファイルはアルファベット順・大文字小文字を区別せずに自動ソートされます）。
 
-## Live Development
+- **リッチな Markdown プレビュー**  
+  `markdown-it` を利用しており、GitHub 風のスタイル適用（github-markdown-css）に加えて、`highlight.js` によるコードのシンタックスハイライト、`mermaid` によるダイアグラムのネイティブ描画に対応しています。また、Markdown 内のローカル画像（相対パス）も自動で Data URI に変換されて表示されます。
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+- **画像ファイルの直接表示**  
+  主要な画像フォーマット（`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`, `.svg`）をサポートしており、ファイル一覧から画像をクリックするだけで右側の画面に大きく表示できます。バイナリファイルを選択した場合はクラッシュを防ぐ保護機能が働きます。
 
-## Building
+## 開発
 
-To build a redistributable, production mode package, use `wails build`.
+ライブ開発モード（ホットリロード機能つき）を利用するには、プロジェクトディレクトリで以下のコマンドを実行します。
+
+```bash
+wails dev
+```
+
+これにより、フロントエンド（Vite）とバックエンド（Go）が連携した状態で起動し、コードを保存するたびに即座に変更が反映されます。
+
+## ビルド（Building）
+
+本番用の実行ファイル（`.exe` など）を出力するには、以下のコマンドを実行します。
+
+```bash
+wails build
+```
+
+コンパイルが完了すると、成果物が `build/bin/` フォルダ内に出力されます。

@@ -17,7 +17,3 @@ export function InitializeFile() {
 export function LoadFile(arg1) {
   return window['go']['main']['App']['LoadFile'](arg1);
 }
-
-export function OpenFile() {
-  return window['go']['main']['App']['OpenFile']();
-}

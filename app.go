@@ -173,29 +173,22 @@ func (a *App) GetParentDir(dirPath string) string {
 	return filepath.Dir(dirPath)
 }
 
-// OpenFile opens a file selection dialog.
-func (a *App) OpenFile() {
-	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Markdown File",
-		Filters: []runtime.FileFilter{
-			{
-				DisplayName: "Markdown Files (*.md;*.markdown)",
-				Pattern:     "*.md;*.markdown",
-			},
-			{
-				DisplayName: "All Files (*.*)",
-				Pattern:     "*.*",
-			},
-		},
-	})
-
-	if err != nil {
-		fmt.Printf("Error selecting file: %v\n", err)
-		return
-	}
-
-	if selection != "" {
-		a.LoadFile(selection)
+func getMimeType(ext string) string {
+	switch ext {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return ""
 	}
 }
 
@@ -243,31 +236,8 @@ func (a *App) LoadFile(filePath string) {
 	var payload string
 	ext := strings.ToLower(filepath.Ext(absPath))
 
-	// Handle images
-	isImage := false
-	var mimeType string
-	switch ext {
-	case ".png":
-		isImage = true
-		mimeType = "image/png"
-	case ".jpg", ".jpeg":
-		isImage = true
-		mimeType = "image/jpeg"
-	case ".gif":
-		isImage = true
-		mimeType = "image/gif"
-	case ".webp":
-		isImage = true
-		mimeType = "image/webp"
-	case ".bmp":
-		isImage = true
-		mimeType = "image/bmp"
-	case ".svg":
-		isImage = true
-		mimeType = "image/svg+xml"
-	}
-
-	if isImage {
+	mimeType := getMimeType(ext)
+	if mimeType != "" {
 		base64Str := base64.StdEncoding.EncodeToString(content)
 		payload = fmt.Sprintf("![%s](data:%s;base64,%s)", filepath.Base(absPath), mimeType, base64Str)
 	} else if isBinary {
@@ -291,20 +261,7 @@ func (a *App) LoadFile(filePath string) {
 						imgData, err := os.ReadFile(fullImgPath)
 						if err == nil {
 							imgExt := strings.ToLower(filepath.Ext(fullImgPath))
-							var imgMime string
-							switch imgExt {
-							case ".png":
-								imgMime = "image/png"
-							case ".jpg", ".jpeg":
-								imgMime = "image/jpeg"
-							case ".gif":
-								imgMime = "image/gif"
-							case ".webp":
-								imgMime = "image/webp"
-							case ".svg":
-								imgMime = "image/svg+xml"
-							}
-
+							imgMime := getMimeType(imgExt)
 							if imgMime != "" {
 								imgBase64 := base64.StdEncoding.EncodeToString(imgData)
 								newDataURI := fmt.Sprintf("data:%s;base64,%s", imgMime, imgBase64)
