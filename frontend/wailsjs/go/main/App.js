@@ -6,6 +6,10 @@ export function GetDirectoryTree(arg1) {
   return window['go']['main']['App']['GetDirectoryTree'](arg1);
 }
 
+export function GetParentDir(arg1) {
+  return window['go']['main']['App']['GetParentDir'](arg1);
+}
+
 export function InitializeFile() {
   return window['go']['main']['App']['InitializeFile']();
 }

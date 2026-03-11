@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -152,7 +156,21 @@ func (a *App) GetDirectoryTree(dirPath string) ([]FileNode, error) {
 			IsDir: entry.IsDir(),
 		})
 	}
+
+	// Sort nodes: directories first, then files. Sort case-insensitively by name.
+	sort.Slice(nodes, func(i, j int) bool {
+		if nodes[i].IsDir != nodes[j].IsDir {
+			return nodes[i].IsDir
+		}
+		return strings.ToLower(nodes[i].Name) < strings.ToLower(nodes[j].Name)
+	})
+
 	return nodes, nil
+}
+
+// GetParentDir returns the parent directory of the given path
+func (a *App) GetParentDir(dirPath string) string {
+	return filepath.Dir(dirPath)
 }
 
 // OpenFile opens a file selection dialog.
@@ -212,6 +230,58 @@ func (a *App) LoadFile(filePath string) {
 	// Update window title
 	runtime.WindowSetTitle(a.ctx, fmt.Sprintf("MashDiewer - %s", filepath.Base(absPath)))
 
+	// Check if file is binary
+	isBinary := false
+	checkLen := len(content)
+	if checkLen > 512 {
+		checkLen = 512
+	}
+	if bytes.IndexByte(content[:checkLen], 0) != -1 {
+		isBinary = true
+	}
+
+	var payload string
+	ext := strings.ToLower(filepath.Ext(absPath))
+
+	// Handle images
+	isImage := false
+	var mimeType string
+	switch ext {
+	case ".png":
+		isImage = true
+		mimeType = "image/png"
+	case ".jpg", ".jpeg":
+		isImage = true
+		mimeType = "image/jpeg"
+	case ".gif":
+		isImage = true
+		mimeType = "image/gif"
+	case ".webp":
+		isImage = true
+		mimeType = "image/webp"
+	case ".bmp":
+		isImage = true
+		mimeType = "image/bmp"
+	case ".svg":
+		isImage = true
+		mimeType = "image/svg+xml"
+	}
+
+	if isImage {
+		base64Str := base64.StdEncoding.EncodeToString(content)
+		payload = fmt.Sprintf("![%s](data:%s;base64,%s)", filepath.Base(absPath), mimeType, base64Str)
+	} else if isBinary {
+		payload = fmt.Sprintf("# Unsupported File\n\n`%s` appears to be a binary file and cannot be displayed as text.", filepath.Base(absPath))
+	} else {
+		if ext == ".md" || ext == ".markdown" {
+			payload = string(content)
+		} else {
+			// Wrap raw text in a Markdown code block so highlight.js handles it
+			lang := strings.TrimPrefix(ext, ".")
+			payload = fmt.Sprintf("```%s\n%s\n```", lang, string(content))
+		}
+	}
+
 	// Send content to frontend
-	runtime.EventsEmit(a.ctx, "markdown-updated", string(content))
+	runtime.EventsEmit(a.ctx, "markdown-updated", payload)
 }

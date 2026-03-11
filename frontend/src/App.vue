@@ -1,12 +1,12 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 import { InitializeFile } from '../wailsjs/go/main/App';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import mermaid from 'mermaid';
 import TreeNode from './components/TreeNode.vue';
-import { GetDirectoryTree } from '../wailsjs/go/main/App';
+import { GetDirectoryTree, GetParentDir } from '../wailsjs/go/main/App';
 
 // Styles for GitHub markdown and syntax highlighting
 import 'github-markdown-css/github-markdown.css';
@@ -16,6 +16,64 @@ const markdownHtml = ref<string>('');
 const isError = ref<boolean>(false);
 const treeNodes = ref<any[]>([]);
 const currentDir = ref<string>('');
+
+const currentDirName = computed(() => {
+  if (!currentDir.value) return 'Drives';
+  const parts = currentDir.value.split(/[\\/]/).filter(Boolean);
+  if (parts.length === 0) return currentDir.value;
+  if (parts.length === 1 && parts[0].endsWith(':')) return parts[0] + '\\';
+  return parts[parts.length - 1];
+});
+
+const navigateUp = async () => {
+  try {
+    const parentDir = await GetParentDir(currentDir.value);
+    if (parentDir && parentDir !== currentDir.value) {
+      currentDir.value = parentDir;
+      treeNodes.value = await GetDirectoryTree(parentDir);
+    }
+  } catch (e) {
+    console.error("Failed to navigate up", e);
+  }
+};
+
+const navigateToDir = async (path: string) => {
+  try {
+    currentDir.value = path;
+    treeNodes.value = await GetDirectoryTree(path);
+  } catch (e) {
+    console.error("Failed to navigate to dir", e);
+  }
+};
+
+const sidebarWidth = ref<number>(300);
+const isResizing = ref<boolean>(false);
+
+const startResize = (e: MouseEvent) => {
+  isResizing.value = true;
+  document.addEventListener('mousemove', doResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+};
+
+const doResize = (e: MouseEvent) => {
+  if (isResizing.value) {
+    let newWidth = e.clientX;
+    // adding constrains
+    if (newWidth < 150) newWidth = 150;
+    if (newWidth > 800) newWidth = 800;
+    sidebarWidth.value = newWidth;
+  }
+};
+
+const stopResize = () => {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', doResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+};
 
 mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
@@ -71,19 +129,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="layout-container">
-    <div class="sidebar">
+  <div class="layout-container" :class="{ 'is-resizing': isResizing }">
+    <div class="sidebar" :style="{ width: sidebarWidth + 'px' }">
       <div class="sidebar-header">
-        <span class="sidebar-title">Explorer</span>
+        <button class="up-btn" @click="navigateUp" title="Up to parent directory">⬆️</button>
+        <span class="sidebar-title" :title="currentDir">{{ currentDirName }}</span>
       </div>
       <div class="sidebar-content">
         <TreeNode 
           v-for="node in treeNodes" 
           :key="node.path" 
           :node="node" 
+          @navigate="navigateToDir"
         />
       </div>
     </div>
+    
+    <div class="resizer" @mousedown="startResize" :class="{ active: isResizing }"></div>
     
     <div class="main-content wrapper" :class="{ 'error-wrapper': isError }">
     <div v-if="!markdownHtml" class="loading-state">
@@ -133,14 +195,32 @@ html, body {
   width: 100%;
 }
 
+.layout-container.is-resizing {
+  user-select: none;
+}
+
 .sidebar {
-  width: 300px;
-  min-width: 200px;
+  min-width: 150px;
+  max-width: 800px;
   background-color: #f6f8fa;
-  border-right: 1px solid #d0d7de;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  border-right: 1px solid #d0d7de;
+  transition: background-color 0.2s;
+  z-index: 10;
+}
+
+.resizer:hover, .resizer.active {
+  background-color: #0969da;
+  border-right: none;
+  width: 5px;
 }
 
 .sidebar-header {
@@ -149,6 +229,24 @@ html, body {
   font-weight: 600;
   font-size: 14px;
   color: #24292f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.up-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.up-btn:hover {
+  background-color: #d0d7de;
 }
 
 .sidebar-content {

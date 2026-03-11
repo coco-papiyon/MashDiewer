@@ -1,32 +1,24 @@
 <script lang="ts" setup>
-import { ref, watch } from 'vue';
-import { GetDirectoryTree, LoadFile } from '../../wailsjs/go/main/App';
+import { LoadFile } from '../../wailsjs/go/main/App';
 
 interface FileNode {
   name: string;
   path: string;
   isDir: boolean;
-  children?: FileNode[];
 }
 
 const props = defineProps<{
   node: FileNode;
 }>();
 
-const isOpen = ref(false);
+const emit = defineEmits<{
+  (e: 'navigate', path: string): void
+}>();
 
-const toggle = async () => {
+const handleInteraction = () => {
   if (props.node.isDir) {
-    isOpen.value = !isOpen.value;
-    if (isOpen.value && (!props.node.children || props.node.children.length === 0)) {
-        try {
-            const children = await GetDirectoryTree(props.node.path);
-            props.node.children = children;
-        } catch (e) {
-            console.error("Failed to load children", e);
-        }
-    }
-  } else if (props.node.name.toLowerCase().endsWith('.md')) {
+    emit('navigate', props.node.path);
+  } else {
     LoadFile(props.node.path);
   }
 };
@@ -36,18 +28,11 @@ const toggle = async () => {
   <div class="tree-node">
     <div 
         class="node-label" 
-        @click="toggle"
-        :class="{ 'is-dir': node.isDir, 'is-md': !node.isDir && node.name.toLowerCase().endsWith('.md') }"
+        @click="handleInteraction"
+        :class="{ 'is-dir': node.isDir, 'is-file': !node.isDir }"
     >
-      <span class="icon">{{ node.isDir ? (isOpen ? '📂' : '📁') : '📄' }}</span>
+      <span class="icon">{{ node.isDir ? '📁' : '📄' }}</span>
       {{ node.name }}
-    </div>
-    <div v-if="node.isDir && isOpen && node.children" class="node-children">
-      <TreeNode 
-          v-for="child in node.children" 
-          :key="child.path" 
-          :node="child" 
-      />
     </div>
   </div>
 </template>
@@ -70,15 +55,12 @@ const toggle = async () => {
 .node-label:hover {
   background-color: #f0f0f0;
 }
-.node-label.is-md {
-  font-weight: 500;
-  color: #0366d6;
+.node-label.is-file {
+  font-weight: 400;
+  color: #000000;
 }
 .icon {
   margin-right: 6px;
   font-size: 16px;
-}
-.node-children {
-  padding-left: 20px;
 }
 </style>
