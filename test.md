@@ -5,18 +5,18 @@ This is a **test** markdown file to verify the rendering.
 - Item 1
 - Item 2
 
-## コード  
+## h2  
+
+### テスト用  
+
 ```javascript
 console.log("Hello from MashDiewer!");
 ```
 
-### テーブル  
 | Header 1 | Header 2 | Header 3 |
 |----------|----------|----------|
 | Cell 1   | Cell 2   | Cell 3   |
 | Cell 4   | Cell 5   | Cell 6   |
-
-## Mermaid テスト
 
 ```mermaid
 graph TD;
@@ -25,3 +25,12 @@ graph TD;
     B-->D;
     C-->D;
 ```
+
+![MashDiewer](MashDiewer.png)
+
+## Links
+
+- [Google](https://www.google.com)
+- [Local README.md](README.md)
+
+

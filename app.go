@@ -274,7 +274,47 @@ func (a *App) LoadFile(filePath string) {
 		payload = fmt.Sprintf("# Unsupported File\n\n`%s` appears to be a binary file and cannot be displayed as text.", filepath.Base(absPath))
 	} else {
 		if ext == ".md" || ext == ".markdown" {
-			payload = string(content)
+			markdownContent := string(content)
+
+			// Simple logic to resolve relative image paths in markdown
+			// This finds ![]() and tries to replace path with base64
+			lines := strings.Split(markdownContent, "\n")
+			for i, line := range lines {
+				if strings.Contains(line, "![") && strings.Contains(line, "](") && strings.Contains(line, ")") {
+					startIdx := strings.Index(line, "](") + 2
+					endIdx := strings.Index(line[startIdx:], ")") + startIdx
+					imgPath := line[startIdx:endIdx]
+
+					// If it's a relative path and not a URL
+					if !strings.HasPrefix(imgPath, "http") && !strings.HasPrefix(imgPath, "data:") {
+						fullImgPath := filepath.Join(filepath.Dir(absPath), imgPath)
+						imgData, err := os.ReadFile(fullImgPath)
+						if err == nil {
+							imgExt := strings.ToLower(filepath.Ext(fullImgPath))
+							var imgMime string
+							switch imgExt {
+							case ".png":
+								imgMime = "image/png"
+							case ".jpg", ".jpeg":
+								imgMime = "image/jpeg"
+							case ".gif":
+								imgMime = "image/gif"
+							case ".webp":
+								imgMime = "image/webp"
+							case ".svg":
+								imgMime = "image/svg+xml"
+							}
+
+							if imgMime != "" {
+								imgBase64 := base64.StdEncoding.EncodeToString(imgData)
+								newDataURI := fmt.Sprintf("data:%s;base64,%s", imgMime, imgBase64)
+								lines[i] = strings.Replace(line, imgPath, newDataURI, 1)
+							}
+						}
+					}
+				}
+			}
+			payload = strings.Join(lines, "\n")
 		} else {
 			// Wrap raw text in a Markdown code block so highlight.js handles it
 			lang := strings.TrimPrefix(ext, ".")

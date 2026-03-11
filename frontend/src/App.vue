@@ -5,6 +5,7 @@ import { InitializeFile } from '../wailsjs/go/main/App';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import mermaid from 'mermaid';
+import AnsiToHtml from 'ansi-to-html';
 import TreeNode from './components/TreeNode.vue';
 import { GetDirectoryTree, GetParentDir } from '../wailsjs/go/main/App';
 
@@ -95,11 +96,36 @@ const md = new MarkdownIt({
   }
 });
 
+// Configure MarkdownIt to open links in a new window
+const defaultRender = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
+  return self.renderToken(tokens, idx, options);
+};
+md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
+  const aIndex = tokens[idx].attrIndex('target');
+  if (aIndex < 0) {
+    tokens[idx].attrPush(['target', '_blank']);
+  } else {
+    if (tokens[idx].attrs && tokens[idx].attrs![aIndex]) {
+      tokens[idx].attrs![aIndex][1] = '_blank';
+    }
+  }
+  return defaultRender(tokens, idx, options, env, self);
+};
+
+const ansiConvert = new AnsiToHtml({
+  escapeXML: false,
+  newline: false,
+  fg: '#24292f',
+  bg: '#ffffff'
+});
+
 onMounted(() => {
   // Listen for markdown updates from the Go backend
   EventsOn('markdown-updated', async (markdownContent: string) => {
     isError.value = markdownContent.startsWith('# Error\n');
-    markdownHtml.value = md.render(markdownContent);
+    const renderedHtml = md.render(markdownContent);
+    // Convert ANSI escape codes to HTML tags
+    markdownHtml.value = ansiConvert.toHtml(renderedHtml);
     await nextTick();
     try {
       mermaid.run({ querySelector: '.mermaid', suppressErrors: true });
